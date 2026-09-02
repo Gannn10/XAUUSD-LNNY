@@ -25,8 +25,9 @@
         <li><a href="#metrics">Performance</a></li>
         <li><a href="#strategy">Strategy</a></li>
         <li><a href="#dashboard">Dashboard</a></li>
+        <li><a href="#gallery">Gallery</a></li>
         <li><a href="#about">About</a></li>
-        <li><a href="https://github.com/Gannn10/Sesi-London-NY-XAUUSD-" target="_blank" class="btn-nav">GitHub →</a></li>
+        <li><a href="https://github.com/Gannn10/XAUUSD-LNNY" target="_blank" class="btn-nav">GitHub →</a></li>
       </ul>
     </nav>
 
@@ -45,7 +46,7 @@
       </p>
       <div class="hero-cta">
         <a href="#metrics" class="btn-primary">View Performance ↓</a>
-        <a href="https://github.com/Gannn10/Sesi-London-NY-XAUUSD-" target="_blank" class="btn-ghost">
+        <a href="https://github.com/Gannn10/XAUUSD-LNNY" target="_blank" class="btn-ghost">
           <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
           View Source
         </a>
@@ -381,6 +382,92 @@
     </div>
   </section>
 
+  <!-- ========== TABLEAU GALLERY ========== -->
+  <section class="section gallery-section" id="gallery">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">📸 Tableau Screenshots</span>
+        <h2>Real <span class="gradient-text">Dashboard Proof</span></h2>
+        <p>Tangkapan layar langsung dari Tableau — visualisasi hasil backtest nyata</p>
+      </div>
+
+      <!-- Main featured screenshot -->
+      <div class="gallery-featured">
+        <div class="gallery-badge">⭐ Main Dashboard</div>
+        <img
+          src="images/dashboard_final.png"
+          alt="Tableau Main Dashboard — XAU/USD Trading Bot Overview"
+          class="gallery-main-img"
+          id="galleryMainImg"
+          onclick="openLightbox(this.src, this.alt)"
+        />
+        <p class="gallery-caption">Dashboard Utama — Header & Executive Summary, Equity Curve, Feature Importance, Win Rate per Sesi, Monthly P&amp;L Heatmap, Trade P&amp;L Distribution</p>
+      </div>
+
+      <!-- Grid screenshots -->
+      <div class="gallery-grid">
+        <div class="gallery-item" onclick="openLightbox('images/dashboard_overview.png', 'Dashboard Overview — First Version')" id="gi-1">
+          <img src="images/dashboard_overview.png" alt="Dashboard Overview" loading="lazy" />
+          <div class="gallery-overlay">
+            <span class="gallery-zoom">🔍</span>
+            <div class="gallery-item-title">Dashboard Overview</div>
+          </div>
+        </div>
+        <div class="gallery-item" onclick="openLightbox('images/equity_curve.png', 'Equity Curve & Drawdown')" id="gi-2">
+          <img src="images/equity_curve.png" alt="Equity Curve & Drawdown" loading="lazy" />
+          <div class="gallery-overlay">
+            <span class="gallery-zoom">🔍</span>
+            <div class="gallery-item-title">Equity Curve & Drawdown</div>
+          </div>
+        </div>
+        <div class="gallery-item" onclick="openLightbox('images/feature_importance.png', 'Feature Importance — XGBoost')" id="gi-3">
+          <img src="images/feature_importance.png" alt="Feature Importance" loading="lazy" />
+          <div class="gallery-overlay">
+            <span class="gallery-zoom">🔍</span>
+            <div class="gallery-item-title">Feature Importance</div>
+          </div>
+        </div>
+        <div class="gallery-item" onclick="openLightbox('images/win_rate_session.png', 'Win Rate per Session')" id="gi-4">
+          <img src="images/win_rate_session.png" alt="Win Rate per Session" loading="lazy" />
+          <div class="gallery-overlay">
+            <span class="gallery-zoom">🔍</span>
+            <div class="gallery-item-title">Win Rate per Session</div>
+          </div>
+        </div>
+        <div class="gallery-item" onclick="openLightbox('images/dashboard_full.png', 'Full Dashboard — Updated Version')" id="gi-5">
+          <img src="images/dashboard_full.png" alt="Full Dashboard Updated" loading="lazy" />
+          <div class="gallery-overlay">
+            <span class="gallery-zoom">🔍</span>
+            <div class="gallery-item-title">Full Dashboard (Updated)</div>
+          </div>
+        </div>
+        <div class="gallery-item" onclick="openLightbox('images/monthly_heatmap.png', 'Monthly P&amp;L Heatmap')" id="gi-6">
+          <img src="images/monthly_heatmap.png" alt="Monthly P&L Heatmap" loading="lazy" />
+          <div class="gallery-overlay">
+            <span class="gallery-zoom">🔍</span>
+            <div class="gallery-item-title">Monthly P&amp;L Heatmap</div>
+          </div>
+        </div>
+        <div class="gallery-item" onclick="openLightbox('images/feature_importance_full.png', 'Feature Importance — Full Detail')" id="gi-7">
+          <img src="images/feature_importance_full.png" alt="Feature Importance Full" loading="lazy" />
+          <div class="gallery-overlay">
+            <span class="gallery-zoom">🔍</span>
+            <div class="gallery-item-title">Feature Importance Detail</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lightbox -->
+    <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+      <div class="lightbox-inner" onclick="event.stopPropagation()">
+        <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+        <img src="" alt="" id="lightboxImg" />
+        <div class="lightbox-caption" id="lightboxCaption"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- ========== TECH STACK ========== -->
   <section class="section tech-section">
     <div class="container">
@@ -415,7 +502,7 @@
             and systematic trading.
           </p>
           <div class="about-links">
-            <a href="https://github.com/Gannn10/Sesi-London-NY-XAUUSD-" target="_blank" class="btn-primary">
+            <a href="https://github.com/Gannn10/XAUUSD-LNNY" target="_blank" class="btn-primary">
               <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
               View on GitHub
             </a>

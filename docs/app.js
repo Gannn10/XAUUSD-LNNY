@@ -312,7 +312,7 @@ function initScrollAnimations() {
     });
   }, { threshold: 0.15 });
 
-  document.querySelectorAll('.kpi-card, .strategy-card, .tech-card, .skill-card, .feature-importance, .heatmap-container').forEach(el => {
+  document.querySelectorAll('.kpi-card, .strategy-card, .tech-card, .skill-card, .feature-importance, .heatmap-container, .gallery-item, .gallery-featured').forEach(el => {
     el.style.opacity = '0';
     el.style.transform = 'translateY(20px)';
     el.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
@@ -328,3 +328,29 @@ function initScrollAnimations() {
   `;
   document.head.appendChild(styleTag);
 }
+
+// ===== LIGHTBOX =====
+function openLightbox(src, caption) {
+  const lb = document.getElementById('lightbox');
+  const img = document.getElementById('lightboxImg');
+  const cap = document.getElementById('lightboxCaption');
+  if (!lb || !img) return;
+  img.src = src;
+  img.alt = caption || '';
+  if (cap) cap.textContent = caption || '';
+  lb.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeLightbox() {
+  const lb = document.getElementById('lightbox');
+  if (!lb) return;
+  lb.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// Close on Escape key
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeLightbox();
+});
+
