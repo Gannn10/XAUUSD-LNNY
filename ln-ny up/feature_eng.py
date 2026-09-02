@@ -129,7 +129,7 @@ class FeatureEngineer:
         # Drop temporary columns
         df = df.drop(["_delta", "_gains", "_losses", "_avg_gain", "_avg_loss"])
         
-        logger.debug(f"RSI calculated (period={period})")
+        # logger.debug(f"RSI calculated (period={period})")
         return df
     
     def calculate_atr(
@@ -369,8 +369,9 @@ class FeatureEngineer:
         df = df.with_columns([
             pl.col("close").ewm_mean(span=20, adjust=False).alias("ema_20"),
             pl.col("close").ewm_mean(span=50, adjust=False).alias("ema_50"),
+            pl.col("close").ewm_mean(span=200, adjust=False).alias("ema_200"),
         ])
-        logger.debug("EMA 20/50 calculated")
+        logger.debug("EMA 20/50/200 calculated")
         return df
     
     def calculate_volume_features(

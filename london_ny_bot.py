@@ -100,7 +100,7 @@ def cek_posisi_terbuka():
     if not positions: return False
     return any(p.magic == cfg.MAGIC_NUMBER for p in positions)
 
-def terapkan_smart_exits(regime, rsi, harga_close):
+def terapkan_smart_exits(regime, rsi, harga_close, atr=3.0):
     positions = mt5.positions_get(symbol=cfg.SYMBOL)
     if positions is None or len(positions) == 0:
         return
@@ -132,31 +132,29 @@ def terapkan_smart_exits(regime, rsi, harga_close):
                 
             # --- 2. REGIME EXIT ---
             # Jika market berubah jadi Choppy dan posisi sedang profit -> Close
-            if regime == "CHOPPY" and profit_usd >= 3.0: # Profit minimal $3.00 (30 pips XAUUSD)
+            if regime == "CHOPPY" and profit_usd >= (1.0 * atr): 
                 logger.info(f"[SMART EXIT] Market menjadi CHOPPY. Menutup posisi #{pos.ticket} untuk amankan profit (${profit_usd:.2f}).")
                 close_position(pos, tick.bid if pos.type == mt5.ORDER_TYPE_BUY else tick.ask)
                 continue
 
             # --- 3. DYNAMIC TRAILING STOP (Step Trailing) ---
-            # Jika profit >= $6.00 (60 pips), trailing stop = harga_sekarang - $3.00
-            # Jika profit >= $4.00 (40 pips), SL digeser ke Breakeven
             if pos.type == mt5.ORDER_TYPE_BUY:
-                if profit_usd >= 6.0: # 60 pips
-                    new_sl = tick.bid - 3.00
+                if profit_usd >= (2.0 * atr): 
+                    new_sl = tick.bid - (1.0 * atr)
                     if pos.sl == 0.0 or new_sl > pos.sl:
                         modify_sl(pos, new_sl)
                         logger.info(f"[TRAILING STOP] SL BUY #{pos.ticket} digeser ke {new_sl:.2f}")
-                elif profit_usd >= 4.0: # 40 pips
+                elif profit_usd >= (1.5 * atr): 
                     if pos.sl == 0.0 or pos.sl < pos.price_open:
                         modify_sl(pos, pos.price_open)
                         logger.info(f"[SMART BE] Posisi BUY #{pos.ticket} diamankan di BEP.")
             elif pos.type == mt5.ORDER_TYPE_SELL:
-                if profit_usd >= 6.0: # 60 pips
-                    new_sl = tick.ask + 3.00
+                if profit_usd >= (2.0 * atr): 
+                    new_sl = tick.ask + (1.0 * atr)
                     if pos.sl == 0.0 or new_sl < pos.sl:
                         modify_sl(pos, new_sl)
                         logger.info(f"[TRAILING STOP] SL SELL #{pos.ticket} digeser ke {new_sl:.2f}")
-                elif profit_usd >= 4.0: # 40 pips
+                elif profit_usd >= (1.5 * atr): 
                     if pos.sl == 0.0 or pos.sl > pos.price_open:
                         modify_sl(pos, pos.price_open)
                         logger.info(f"[SMART BE] Posisi SELL #{pos.ticket} diamankan di BEP.")
@@ -497,8 +495,10 @@ def main():
     loss_beruntun = 0
     tanggal_terakhir = datetime.now(wib).date()
     last_log_time = None
-    last_active_ticket = None
-    last_signal_time = None  # Menyimpan waktu candle terakhir yang memicu OP
+    active_tickets = []
+    last_signal_times = {}  # Menyimpan waktu candle terakhir yang memicu OP per strategi
+    last_regime_update = None
+    current_regime = "UNKNOWN"
 
     while True:
         sekarang_wib = datetime.now(wib)
@@ -522,11 +522,11 @@ def main():
             time.sleep(60 * 15)
             continue
             
-        # if loss_beruntun >= cfg.MAX_LOSS_BERUNTUN:
-        #     logger.info(f"Loss beruntun {loss_beruntun}x. Pause {cfg.PAUSE_SETELAH_LOSS} menit.")
-        #     time.sleep(cfg.PAUSE_SETELAH_LOSS * 60)
-        #     loss_beruntun = 0
-        #     continue
+        if loss_beruntun >= getattr(cfg, 'MAX_LOSS_BERUNTUN', 2):
+            logger.info(f"Loss beruntun {loss_beruntun}x. Pause {getattr(cfg, 'PAUSE_SETELAH_LOSS', 60)} menit.")
+            time.sleep(getattr(cfg, 'PAUSE_SETELAH_LOSS', 60) * 60)
+            loss_beruntun = 0
+            continue
 
         # Ambil data untuk mengevaluasi harga saat ini (live)
         # Kita butuh minimal 200 candle untuk EMA_200 dsb
@@ -539,7 +539,11 @@ def main():
             continue
             
         # HMM Regime Detector (menggunakan candle yang sudah close saja / index[:-1])
-        regime = detect_market_regime(df_m5_pd.iloc[:-1])
+        if last_regime_update is None or (sekarang_wib - last_regime_update).total_seconds() >= 900:
+            current_regime = detect_market_regime(df_m5_pd.iloc[:-1])
+            last_regime_update = sekarang_wib
+            logger.info(f"🔄 Market Regime Diupdate: {current_regime}")
+        regime = current_regime
             
         try:
             # 1. Ekstrak fitur menggunakan Polars
@@ -639,52 +643,61 @@ def main():
             ai_signal_buy = prob_buy >= confidence_threshold
             ai_signal_sell = prob_sell >= confidence_threshold
             
-            # FALLING KNIFE GUARD untuk AI (1x ATR)
-            if ai_signal_buy and price_drop_3c > (1.0 * atr):
+            # FALLING KNIFE GUARD untuk AI (1.5x ATR)
+            if ai_signal_buy and price_drop_3c > (1.5 * atr):
                 ai_signal_buy = False
                 falling_knife_blocked = True
-                logger.info(f"🛡️ FALLING KNIFE GUARD: AI BUY diblokir! Harga jatuh {price_drop_3c:.2f} > ATR {atr:.2f} dalam 3 candle")
-            if ai_signal_sell and price_rise_3c > (1.0 * atr):
+                logger.info(f"🛡️ FALLING KNIFE GUARD: AI BUY diblokir! Harga jatuh {price_drop_3c:.2f} > 1.5x ATR {1.5*atr:.2f} dalam 3 candle")
+            if ai_signal_sell and price_rise_3c > (1.5 * atr):
                 ai_signal_sell = False
                 falling_knife_blocked = True
-                logger.info(f"🛡️ FALLING KNIFE GUARD: AI SELL diblokir! Harga naik {price_rise_3c:.2f} > ATR {atr:.2f} dalam 3 candle")
+                logger.info(f"🛡️ FALLING KNIFE GUARD: AI SELL diblokir! Harga naik {price_rise_3c:.2f} > 1.5x ATR {1.5*atr:.2f} dalam 3 candle")
             
-            # --- SNIPER LOGIC EVALUATION ---
+            # --- SNIPER LOGIC EVALUATION (HIGH ACCURACY SCALPER - OPTUNA TUNED) ---
             live_open_s = float(live_features['open'].iloc[0])
             live_high_s = float(live_features['high'].iloc[0])
             live_low_s = float(live_features['low'].iloc[0])
             
             bb_upper = float(live_features['bb_upper'].iloc[0]) if 'bb_upper' in live_features.columns else harga_close
-            bb_mid = float(live_features['bb_middle'].iloc[0]) if 'bb_middle' in live_features.columns else harga_close
-            std_value = (bb_upper - bb_mid) / getattr(cfg, 'BB_STD_DEV', 2.0)
+            bb_lower = float(live_features['bb_lower'].iloc[0]) if 'bb_lower' in live_features.columns else harga_close
             
-            bb_std_ex = getattr(cfg, 'BB_STD_DEV_EXTREME', 2.5)
-            upper_bb_extreme = bb_mid + (bb_std_ex * std_value)
-            lower_bb_extreme = bb_mid - (bb_std_ex * std_value)
+            # BB Extreme (Pierce BB + 0.71 ATR)
+            bb_mult = 0.71
+            upper_bb_extreme = bb_upper + (bb_mult * atr)
+            lower_bb_extreme = bb_lower - (bb_mult * atr)
             
+            pierce_upper = (harga_close >= upper_bb_extreme or live_high_s >= upper_bb_extreme)
+            pierce_lower = (harga_close <= lower_bb_extreme or live_low_s <= lower_bb_extreme)
+            
+            # Rejection (Wick > 28%)
             candle_range = live_high_s - live_low_s
             if candle_range == 0: candle_range = 0.0001
             upper_wick = live_high_s - max(live_open_s, harga_close)
             lower_wick = min(live_open_s, harga_close) - live_low_s
             
-            is_rejection_top = (upper_wick > (0.4 * candle_range)) or (harga_close < live_open_s)
-            is_rejection_bottom = (lower_wick > (0.4 * candle_range)) or (harga_close > live_open_s)
+            rejection_ratio = 0.28
+            is_rejection_top = (upper_wick / candle_range) >= rejection_ratio
+            is_rejection_bottom = (lower_wick / candle_range) >= rejection_ratio
             
-            rsi_ob_ex = getattr(cfg, 'RSI_OVERBOUGHT_EXTREME', 70)
-            rsi_os_ex = getattr(cfg, 'RSI_OVERSOLD_EXTREME', 30)
+            # RSI Extreme (Optuna Tuned)
+            rsi_sell_thresh = 62.56
+            rsi_buy_thresh = 34.38
             
-            sniper_signal_sell = (harga_close >= upper_bb_extreme or live_high_s >= upper_bb_extreme) and (rsi >= rsi_ob_ex) and is_rejection_top
-            sniper_signal_buy = (harga_close <= lower_bb_extreme or live_low_s <= lower_bb_extreme) and (rsi <= rsi_os_ex) and is_rejection_bottom
+            # Anti-crash / Anti-news
+            anti_crash_mult = 3.00
             
-            # SNIPER ANTI-CRASH FILTER (2x ATR dalam 3 candle — hanya blokir saat crash parah)
-            if sniper_signal_buy and price_drop_3c > (2.0 * atr):
+            sniper_signal_sell = pierce_upper and (rsi >= rsi_sell_thresh) and is_rejection_top
+            sniper_signal_buy = pierce_lower and (rsi <= rsi_buy_thresh) and is_rejection_bottom
+            
+            # SNIPER ANTI-CRASH FILTER
+            if sniper_signal_buy and price_drop_3c > (anti_crash_mult * atr):
                 sniper_signal_buy = False
                 sniper_crash_blocked = True
-                logger.info(f"🛡️ ANTI-CRASH: Sniper BUY diblokir! Crash {price_drop_3c:.2f} > 2×ATR {2.0*atr:.2f}")
-            if sniper_signal_sell and price_rise_3c > (2.0 * atr):
+                logger.info(f"🛡️ ANTI-CRASH: Sniper BUY diblokir! Crash {price_drop_3c:.2f} > {anti_crash_mult}xATR")
+            if sniper_signal_sell and price_rise_3c > (anti_crash_mult * atr):
                 sniper_signal_sell = False
                 sniper_crash_blocked = True
-                logger.info(f"🛡️ ANTI-CRASH: Sniper SELL diblokir! Rally {price_rise_3c:.2f} > 2×ATR {2.0*atr:.2f}")
+                logger.info(f"🛡️ ANTI-CRASH: Sniper SELL diblokir! Rally {price_rise_3c:.2f} > {anti_crash_mult}xATR")
             
             # --- SBR/RBS LOGIC EVALUATION ---
             sbr_signal_sell = False
@@ -697,7 +710,7 @@ def main():
                 # Check RBS (Buy)
                 breakout_rbs_df = recent_5[recent_5['close'] > last_swing_high]
                 if not breakout_rbs_df.empty:
-                    buffer = 0.20 # 2 pips
+                    buffer = 0.5 * atr
                     if live_low_s <= last_swing_high + buffer and live_open_s > last_swing_high:
                         if harga_close > last_swing_high:
                             rbs_signal_buy = True
@@ -705,49 +718,49 @@ def main():
                 # Check SBR (Sell)
                 breakout_sbr_df = recent_5[recent_5['close'] < last_swing_low]
                 if not breakout_sbr_df.empty:
-                    buffer = 0.20 # 2 pips
+                    buffer = 0.5 * atr
                     if live_high_s >= last_swing_low - buffer and live_open_s < last_swing_low:
                         if harga_close < last_swing_low:
                             sbr_signal_sell = True
                             
             # --- STRATEGY OVERRIDE ---
             strategy_mode = getattr(cfg, 'STRATEGY_MODE', 'HYBRID')
-            strategy_name_buy = "🤖 AI_XGBOOST"
-            strategy_name_sell = "🤖 AI_XGBOOST"
+            valid_signals_to_execute = []
             
             if strategy_mode == 'REVERSAL_SNIPER':
                 signal_buy = sniper_signal_buy
                 signal_sell = sniper_signal_sell
-                if signal_buy: 
-                    prob_buy = 1.0; prob_sell = 0.0; is_buy_allowed = True
-                    strategy_name_buy = "🎯 REVERSAL_SNIPER"
-                if signal_sell: 
-                    prob_sell = 1.0; prob_buy = 0.0; is_sell_allowed = True
-                    strategy_name_sell = "🎯 REVERSAL_SNIPER"
+                if signal_buy and is_buy_allowed: 
+                    valid_signals_to_execute.append(("🎯 REVERSAL_SNIPER_BUY", True, 1.0))
+                if signal_sell and is_sell_allowed: 
+                    valid_signals_to_execute.append(("🎯 REVERSAL_SNIPER_SELL", False, 1.0))
             elif strategy_mode == 'HYBRID':
                 signal_buy = ai_signal_buy or sniper_signal_buy or rbs_signal_buy
                 signal_sell = ai_signal_sell or sniper_signal_sell or sbr_signal_sell
                 
-                if rbs_signal_buy:
-                    prob_buy = 1.0; prob_sell = 0.0; is_buy_allowed = True
-                    strategy_name_buy = "🧱 RBS_BUY"
-                elif sniper_signal_buy:
-                    prob_buy = 1.0; prob_sell = 0.0; is_buy_allowed = True
-                    strategy_name_buy = "🎯 REVERSAL_SNIPER"
-                elif ai_signal_buy:
-                    strategy_name_buy = "🤖 AI_XGBOOST"
-                    
-                if sbr_signal_sell:
-                    prob_sell = 1.0; prob_buy = 0.0; is_sell_allowed = True
-                    strategy_name_sell = "🧱 SBR_SELL"
-                elif sniper_signal_sell:
-                    prob_sell = 1.0; prob_buy = 0.0; is_sell_allowed = True
-                    strategy_name_sell = "🎯 REVERSAL_SNIPER"
-                elif ai_signal_sell:
-                    strategy_name_sell = "🤖 AI_XGBOOST"
+                if regime == "CHOPPY":
+                    # Di market Choppy, blokir SBR/RBS/AI, hanya izinkan Sniper
+                    if sniper_signal_buy and is_buy_allowed:
+                        valid_signals_to_execute.append(("🎯 REVERSAL_SNIPER_BUY", True, 1.0))
+                    if sniper_signal_sell and is_sell_allowed:
+                        valid_signals_to_execute.append(("🎯 REVERSAL_SNIPER_SELL", False, 1.0))
+                else:
+                    # Di market Trending/High Volatility, blokir Sniper, izinkan SBR/RBS/AI
+                    if rbs_signal_buy and is_buy_allowed:
+                        valid_signals_to_execute.append(("🧱 RBS_BUY", True, 1.0))
+                    if ai_signal_buy and is_buy_allowed:
+                        valid_signals_to_execute.append(("🤖 AI_XGBOOST_BUY", True, prob_buy))
+                    if sbr_signal_sell and is_sell_allowed:
+                        valid_signals_to_execute.append(("🧱 SBR_SELL", False, 1.0))
+                    if ai_signal_sell and is_sell_allowed:
+                        valid_signals_to_execute.append(("🤖 AI_XGBOOST_SELL", False, prob_sell))
             else: # AI_SCALPER
                 signal_buy = ai_signal_buy
                 signal_sell = ai_signal_sell
+                if signal_buy and is_buy_allowed:
+                    valid_signals_to_execute.append(("🤖 AI_XGBOOST_BUY", True, prob_buy))
+                if signal_sell and is_sell_allowed:
+                    valid_signals_to_execute.append(("🤖 AI_XGBOOST_SELL", False, prob_sell))
             
             atr = float(live_features['atr'].iloc[0]) if 'atr' in live_features.columns else 3.0
             multiplier = get_tp_sl_multiplier(mode)
@@ -758,13 +771,8 @@ def main():
             continue
             
         # Eksekusi Smart Exits (termasuk BEP, Trailing Stop, RSI Exit, Regime Exit)
-        terapkan_smart_exits(regime, rsi, harga_close)
+        terapkan_smart_exits(regime, rsi, harga_close, atr=atr)
         
-        if regime == "CHOPPY":
-            # Jangan spam log setiap loop, cukup tunggu
-            time.sleep(60) # Wait 1 minute before checking again
-            continue
-            
         # Logging
         sekarang_wib = datetime.now(wib)
         semua_posisi = mt5.positions_get(symbol=cfg.SYMBOL)
@@ -772,32 +780,41 @@ def main():
         ada_posisi = len(posisi_terbuka) > 0
 
         # --- TRACK CLOSED TRADES FOR LOSS_BERUNTUN ---
-        if ada_posisi:
-            last_active_ticket = posisi_terbuka[0].ticket
-        else:
-            if last_active_ticket is not None:
+        current_open_tickets = [p.ticket for p in posisi_terbuka]
+        
+        if active_tickets:
+            closed_tickets = [t for t in active_tickets if t not in current_open_tickets]
+            
+            if closed_tickets:
                 time.sleep(1)
                 from_date = datetime.now() - timedelta(days=1)
                 to_date = datetime.now() + timedelta(days=1)
                 deals = mt5.history_deals_get(from_date, to_date)
                 
                 if deals:
-                    net_profit = 0.0
-                    closed = False
-                    for deal in deals:
-                        if getattr(deal, 'position_id', None) == last_active_ticket and deal.entry == mt5.DEAL_ENTRY_OUT:
-                            net_profit += deal.profit + deal.swap + deal.commission
-                            closed = True
-                    
-                    if closed:
-                        if net_profit < 0:
-                            loss_beruntun += 1
-                            logger.warning(f"❌ Trade #{last_active_ticket} tertutup LOSS (${net_profit:.2f}). Loss beruntun: {loss_beruntun}")
-                        else:
-                            loss_beruntun = 0
-                            logger.info(f"✅ Trade #{last_active_ticket} tertutup PROFIT (${net_profit:.2f}). Loss beruntun direset.")
-                
-                last_active_ticket = None
+                    for closed_ticket in closed_tickets:
+                        net_profit = 0.0
+                        found_close_deal = False
+                        for deal in deals:
+                            if getattr(deal, 'position_id', None) == closed_ticket and deal.entry == mt5.DEAL_ENTRY_OUT:
+                                net_profit += deal.profit + deal.swap + deal.commission
+                                found_close_deal = True
+                        
+                        if found_close_deal:
+                            if net_profit < 0:
+                                loss_beruntun += 1
+                                logger.warning(f"❌ Trade #{closed_ticket} tertutup LOSS (${net_profit:.2f}). Loss beruntun: {loss_beruntun}")
+                            else:
+                                loss_beruntun = 0
+                                logger.info(f"✅ Trade #{closed_ticket} tertutup PROFIT (${net_profit:.2f}). Loss beruntun direset.")
+                        
+                        # Hapus dari memori tracking
+                        active_tickets.remove(closed_ticket)
+                        
+        # Tambahkan tiket yang baru terbuka ke memori tracking
+        for t in current_open_tickets:
+            if t not in active_tickets:
+                active_tickets.append(t)
         # ----------------------------------------------
 
         if last_log_time is None or (sekarang_wib - last_log_time).total_seconds() >= 60:
@@ -855,35 +872,72 @@ def main():
         # Eksekusi Order
         if len(posisi_terbuka) < getattr(cfg, 'MAX_POSITIONS', 3):
             # --- FUNNEL LOGGING (Catat Sinyal AI yg Diblokir Filter) ---
-            if (signal_buy and not is_buy_allowed) and (waktu_candle != last_signal_time):
+            who_buy_list = []
+            if ai_signal_buy: who_buy_list.append(f"AI({prob_buy*100:.1f}%)")
+            if sniper_signal_buy: who_buy_list.append("SNIPER")
+            if rbs_signal_buy: who_buy_list.append("RBS")
+            who_buy_str = " + ".join(who_buy_list) if who_buy_list else "Sinyal TAK DIKENAL"
+            
+            who_sell_list = []
+            if ai_signal_sell: who_sell_list.append(f"AI({prob_sell*100:.1f}%)")
+            if sniper_signal_sell: who_sell_list.append("SNIPER")
+            if sbr_signal_sell: who_sell_list.append("SBR")
+            who_sell_str = " + ".join(who_sell_list) if who_sell_list else "Sinyal TAK DIKENAL"
+
+            if (signal_buy and not is_buy_allowed) and (waktu_candle != last_signal_times.get('global_buy')):
                 if blocked_by_momentum:
-                    logger.info(f"[BLOCKED] AI BUY ({prob_buy*100:.1f}%), tapi DIBLOKIR: Momentum sedang terjun tajam (Pisau Jatuh)!")
+                    logger.info(f"[BLOCKED] {who_buy_str} BUY DIBLOKIR: Momentum sedang terjun tajam (Pisau Jatuh)!")
                 elif blocked_by_trend:
-                    logger.info(f"[BLOCKED] AI BUY ({prob_buy*100:.1f}%), tapi DIBLOKIR: Melawan Trend (Harga di bawah EMA 200).")
+                    logger.info(f"[BLOCKED] {who_buy_str} BUY DIBLOKIR: Melawan Trend (Harga di bawah EMA 200).")
                 else:
-                    logger.info(f"[BLOCKED] AI BUY ({prob_buy*100:.1f}%), tapi DIBLOKIR oleh Filter (Sweep).")
-                last_signal_time = waktu_candle # Supaya tidak spam
+                    logger.info(f"[BLOCKED] {who_buy_str} BUY DIBLOKIR oleh Filter (Sweep).")
+                last_signal_times['global_buy'] = waktu_candle
                 
-            if (signal_sell and not is_sell_allowed) and (waktu_candle != last_signal_time):
+            if (signal_sell and not is_sell_allowed) and (waktu_candle != last_signal_times.get('global_sell')):
                 if blocked_by_momentum:
-                    logger.info(f"[BLOCKED] AI SELL ({prob_sell*100:.1f}%), tapi DIBLOKIR: Momentum sedang terbang kencang!")
+                    logger.info(f"[BLOCKED] {who_sell_str} SELL DIBLOKIR: Momentum sedang terbang kencang!")
                 elif blocked_by_trend:
-                    logger.info(f"[BLOCKED] AI SELL ({prob_sell*100:.1f}%), tapi DIBLOKIR: Melawan Trend (Harga di atas EMA 200).")
+                    logger.info(f"[BLOCKED] {who_sell_str} SELL DIBLOKIR: Melawan Trend (Harga di atas EMA 200).")
                 else:
-                    logger.info(f"[BLOCKED] AI SELL ({prob_sell*100:.1f}%), tapi DIBLOKIR oleh Filter (Sweep).")
-                last_signal_time = waktu_candle # Supaya tidak spam
+                    logger.info(f"[BLOCKED] {who_sell_str} SELL DIBLOKIR oleh Filter (Sweep).")
+                last_signal_times['global_sell'] = waktu_candle
                 
             # Menggabungkan Signal ML dan Izin dari Sweep Filter
-            if (signal_buy and is_buy_allowed) or (signal_sell and is_sell_allowed):
-                if waktu_candle != last_signal_time:
-                    strategy_name = strategy_name_buy if signal_buy else strategy_name_sell
-                    logger.info(f"[🔥] SINYAL {strategy_name} TERDETEKSI! Confidence/Strength: {max(prob_buy, prob_sell)*100:.1f}%")
+            for strategy_name, is_buy_signal, prob_signal in valid_signals_to_execute:
+                semua_posisi = mt5.positions_get(symbol=cfg.SYMBOL)
+                posisi_terbuka = [p for p in semua_posisi if p.magic == cfg.MAGIC_NUMBER] if semua_posisi else []
                 
-                    if signal_buy:
+                if len(posisi_terbuka) >= getattr(cfg, 'MAX_POSITIONS', 3):
+                    break
+                    
+                if waktu_candle != last_signal_times.get(strategy_name):
+                    # CEK SPAM: Jangan buka posisi jika strategi ini sudah jalan
+                    active_strats = [p.comment for p in posisi_terbuka if getattr(p, 'comment', None)]
+                    strategy_already_active = False
+                    for active_comment in active_strats:
+                        if strategy_name in active_comment:
+                            strategy_already_active = True
+                            break
+                            
+                    if strategy_already_active:
+                        logger.info(f"⏳ {strategy_name} sudah jalan, menunggu posisi ini tertutup sebelum menembak lagi.")
+                        last_signal_times[strategy_name] = waktu_candle # Biar tidak spam log
+                        continue
+                        
+                    logger.info(f"[🔥] SINYAL {strategy_name} TERDETEKSI! Confidence/Strength: {prob_signal*100:.1f}%")
+                
+                    # Sane Default: TP = 0.54 ATR, SL = 0.66 ATR untuk Sniper (High Accuracy Scalper)
+                    if "SNIPER" in strategy_name:
+                        multiplier['tp'] = 0.54
+                        multiplier['sl'] = 0.66
+                    else:
+                        multiplier = get_tp_sl_multiplier(mode)
+                
+                    if is_buy_signal:
                         ask = mt5.symbol_info_tick(cfg.SYMBOL).ask
                         order_type = mt5.ORDER_TYPE_BUY
                         price = ask
-                        prob = prob_buy
+                        prob = prob_signal
                         
                         # --- Dynamic SL ---
                         sl_statik = ask - (atr * multiplier['sl'])
@@ -910,7 +964,7 @@ def main():
                         bid = mt5.symbol_info_tick(cfg.SYMBOL).bid
                         order_type = mt5.ORDER_TYPE_SELL
                         price = bid
-                        prob = prob_sell
+                        prob = prob_signal
                         
                         # --- Dynamic SL ---
                         sl_statik = bid + (atr * multiplier['sl'])
@@ -934,14 +988,15 @@ def main():
                         else:
                             tp = tp_statik
                         
-                    # Kelly Position Scaler
+                    # Kelly Position Scaler (Hanya untuk AI murni, bukan strategi manual)
                     lot_size = cfg.LOT_SIZE
-                    if prob > 0.85:
-                        lot_size = cfg.LOT_SIZE * 3
-                        logger.info(f"💎 High Conviction! Prob {prob*100:.1f}% > 85%, Lot x3 -> {lot_size}")
-                    elif prob > 0.70:
-                        lot_size = cfg.LOT_SIZE * 2
-                        logger.info(f"🚀 Medium Conviction! Prob {prob*100:.1f}% > 70%, Lot x2 -> {lot_size}")
+                    if "AI_XGBOOST" in strategy_name:
+                        if prob > 0.85:
+                            lot_size = cfg.LOT_SIZE * 3
+                            logger.info(f"💎 High Conviction AI! Prob {prob*100:.1f}% > 85%, Lot x3 -> {lot_size}")
+                        elif prob > 0.70:
+                            lot_size = cfg.LOT_SIZE * 2
+                            logger.info(f"🚀 Medium Conviction AI! Prob {prob*100:.1f}% > 70%, Lot x2 -> {lot_size}")
                         
                     request = {
                         "action": mt5.TRADE_ACTION_DEAL,
@@ -964,7 +1019,7 @@ def main():
                     else:
                         logger.info(f"ORDER BERHASIL! Tiket #{result.order} | TP: {tp:.2f} | SL: {sl:.2f}")
                         trade_count += 1
-                        last_signal_time = waktu_candle  # Catat waktu candle agar tidak OP lagi di candle yang sama
+                        last_signal_times[strategy_name] = waktu_candle  # Catat waktu candle agar tidak OP lagi di candle yang sama
                         
         time.sleep(2)
 

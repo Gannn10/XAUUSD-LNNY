@@ -77,7 +77,7 @@ NOTION_TOKEN         = os.getenv("NOTION_TOKEN", "")  # Diambil dari file .env
 NOTION_DATABASE_ID   = os.getenv("NOTION_DATABASE_ID", "") # Diambil dari file .env
 
 # ── AI THRESHOLD & FILTER ──────────────────────────────────
-AI_CONFIDENCE_THRESHOLD = 0.60      # Dikembalikan ke 0.60 agar entry lebih valid dan aman
-USE_SWEEP_FILTER        = False     # False = Agresif (Murni sinyal AI), True = Sabar (Wajib ada Liquidity Sweep)
+AI_CONFIDENCE_THRESHOLD = 0.70      # Dinaikkan ke 0.70 agar lebih akurat dan mengurangi fake signal
+USE_SWEEP_FILTER        = True      # False = Agresif (Murni sinyal AI), True = Sabar (Wajib ada Liquidity Sweep)
 USE_MOMENTUM_FILTER     = True      # True = Mencegah OP melawan arah saat candle bergerak terlalu kencang (Anti-Pisau Jatuh)
 USE_TREND_FILTER        = True      # True = Hanya OP searah dengan trend besar (EMA 200)

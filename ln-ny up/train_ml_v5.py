@@ -375,8 +375,8 @@ class MLTrainerV5:
         print("ML MODEL V5 (ENHANCED SCALPER) TRAINING PIPELINE")
         print("=" * 80)
 
-        df_m5 = self.fetch_training_data(n_bars=75000)  # V5: More data!
-        df_m15 = self.fetch_m15_data(n_bars=25000)
+        df_m5 = self.fetch_training_data(n_bars=200000)  # V5: MAX DATA (3+ years)
+        df_m15 = self.fetch_m15_data(n_bars=70000)
 
         df = self.engineer_features(df_m5, df_m15)
         df = self.label_data(df)
@@ -391,7 +391,7 @@ class MLTrainerV5:
         )
 
         feature_cols = self.select_features(df_train)
-        model = self.train_xgboost(df_train, df_test, feature_cols, optimize_hyperparams=False)
+        model = self.train_xgboost(df_train, df_test, feature_cols, optimize_hyperparams=True)
 
         self.save_model()
 
